@@ -1,0 +1,64 @@
+
+name: Grilo SC Analysis for Dart/Flutter
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch: {}
+
+jobs:
+  sonar-analysis:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find Flutter project directory
+        id: find_project
+        run: |
+          PROJECT_PATH=$(find . -name "pubspec.yaml" -printf "%h")
+          echo "Project found at: $PROJECT_PATH"
+          echo "PROJECT_PATH=$PROJECT_PATH" >> $GITHUB_ENV
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Flutter packages
+        working-directory: ${{ env.PROJECT_PATH }}
+        run: flutter pub get
+
+      # NOVO PASSO: Prepara os argumentos do Sonar de forma dinâmica
+      - name: Prepare SonarCloud arguments
+        id: sonar_args
+        working-directory: ${{ env.PROJECT_PATH }}
+        run: |
+          SONAR_ARGS="-Dsonar.projectKey=grilo-org_20251014T223451_nicolasvitorino_taski-todo -Dsonar.projectName=20251014T223451_nicolasvitorino_taski-todo -Dsonar.organization=grilo-org -Dsonar.host.url=https://sonarcloud.io"
+          
+          # Verifica se a pasta 'lib' existe e adiciona ao sonar.sources
+          if [ -d "lib" ]; then
+            SONAR_ARGS="$SONAR_ARGS -Dsonar.sources=lib"
+          fi
+          
+          # Verifica se a pasta 'test' existe e adiciona ao sonar.tests
+          if [ -d "test" ]; then
+            SONAR_ARGS="$SONAR_ARGS -Dsonar.tests=test"
+          fi
+          
+          echo "Sonar arguments: $SONAR_ARGS"
+          echo "SONAR_ARGS=$SONAR_ARGS" >> $GITHUB_OUTPUT
+
+      # PASSO ATUALIZADO: Usa os argumentos preparados dinamicamente
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectBaseDir: ${{ env.PROJECT_PATH }}
+          args: ${{ steps.sonar_args.outputs.SONAR_ARGS }}
